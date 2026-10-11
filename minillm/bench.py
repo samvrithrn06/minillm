@@ -17,12 +17,17 @@ from .model import LlamaConfig, LlamaModel, softmax
 from .speculative import speculative_generate
 
 
-def perplexity(model: LlamaModel, ids: Sequence[int], max_len: int) -> float:
+def eval_text(model: LlamaModel, ids: Sequence[int], max_len: int):
+    """Teacher-forced pass over `ids`. Returns (perplexity, argmax prediction per position)."""
     ids = list(ids)[:max_len]
     logits = model.forward(ids[:-1], KVCache(model.cfg), last_only=False)
     probs = softmax(logits.astype(np.float64))
     nll = -np.log(probs[np.arange(len(ids) - 1), ids[1:]] + 1e-12)
-    return float(np.exp(nll.mean()))
+    return float(np.exp(nll.mean())), logits.argmax(-1)
+
+
+def perplexity(model: LlamaModel, ids: Sequence[int], max_len: int) -> float:
+    return eval_text(model, ids, max_len)[0]
 
 
 def run_bench(
@@ -42,6 +47,7 @@ def run_bench(
     prompt = ids[:prompt_len]
     results: Dict[str, Dict] = {}
     greedy: Dict[str, List[int]] = {}
+    preds: Dict[str, np.ndarray] = {}
     models: Dict[str, LlamaModel] = {}
 
     for q in quants:
@@ -56,21 +62,24 @@ def run_bench(
             prompts = [ids[(j * 5) % (len(ids) - prompt_len):][:prompt_len] for j in range(b)]
             _, bst = generate_batch(model, prompts, new_tokens, SamplingParams())
             batching[b] = bst["decode_tok_per_s"]
+        ppl, preds[q] = eval_text(model, ids, cfg.max_seq)
         results[q] = {
             "weight_MB": st["weight_MB"],
             "load_s": load_s,
             "prefill_tok_per_s": st["prefill_tok_per_s"],
             "decode_tok_per_s": st["decode_tok_per_s"],
-            "perplexity": perplexity(model, ids, cfg.max_seq),
+            "perplexity": ppl,
             "batched_decode_tok_per_s": batching,
         }
 
     base = "none" if "none" in greedy else next(iter(greedy))
     for q in quants:
+        # Teacher-forced: both models see the same text; how often do they pick the same next token?
+        results[q]["top1_agreement_vs_" + base] = float(np.mean(preds[q] == preds[base]))
+        # Free-running greedy: tokens generated before the two outputs first differ.
         n = min(len(greedy[q]), len(greedy[base]))
-        results[q]["greedy_agreement_vs_" + base] = (
-            float(np.mean([a == b for a, b in zip(greedy[q][:n], greedy[base][:n])])) if n else 0.0
-        )
+        results[q]["greedy_prefix_match_vs_" + base] = next(
+            (i for i in range(n) if greedy[q][i] != greedy[base][i]), n)
 
     report: Dict = {"quant": results}
     if draft is not None:
@@ -93,13 +102,15 @@ def format_markdown(report: Dict) -> str:
     q = report["quant"]
     names = list(q)
     batch_sizes = list(next(iter(q.values()))["batched_decode_tok_per_s"])
-    agree_key = next(k for k in q[names[0]] if k.startswith("greedy_agreement"))
+    top1_key = next(k for k in q[names[0]] if k.startswith("top1_agreement"))
+    prefix_key = next(k for k in q[names[0]] if k.startswith("greedy_prefix_match"))
     rows = [
         ("weights (MB)", "weight_MB", "{:.1f}"),
         ("prefill tok/s", "prefill_tok_per_s", "{:.1f}"),
         ("decode tok/s (batch 1)", "decode_tok_per_s", "{:.2f}"),
         ("perplexity", "perplexity", "{:.3f}"),
-        (agree_key.replace("_", " "), agree_key, "{:.1%}"),
+        ("top-1 agreement vs fp32 (same text, teacher-forced)", top1_key, "{:.1%}"),
+        ("greedy tokens identical before first divergence", prefix_key, "{}"),
     ]
     lines = ["| metric | " + " | ".join(names) + " |", "|---|" + "---|" * len(names)]
     for label, key, fmt in rows:
