@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minillm"
+version = "0.2.0"
+description = "A from-scratch LLM inference engine in NumPy: KV cache, paged attention, batching, speculative decoding, int8/int4 quantization."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.26"]
+
+[project.optional-dependencies]
+cli = ["tokenizers>=0.19"]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[project.scripts]
+minillm = "minillm.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["minillm*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F"]
