@@ -70,6 +70,7 @@ def test_bench_smoke():
                        draft=draft, spec_k=3)
     assert set(report["quant"]) == {"none", "int8", "int4"}
     assert report["quant"]["int4"]["weight_MB"] < report["quant"]["none"]["weight_MB"]
-    assert report["quant"]["none"]["greedy_agreement_vs_none"] == 1.0
+    assert report["quant"]["none"]["top1_agreement_vs_none"] == 1.0
+    assert report["quant"]["int8"]["top1_agreement_vs_none"] > 0.5
     assert report["speculative"]["output_matches_plain_greedy"]
     assert "perplexity" in format_markdown(report)

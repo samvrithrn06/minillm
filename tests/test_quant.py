@@ -57,3 +57,11 @@ def test_unknown_mode_rejected():
     except ValueError:
         return
     raise AssertionError("expected ValueError")
+
+
+def test_tied_head_not_double_counted():
+    cfg = tiny_cfg()
+    tied = LlamaModel(cfg, random_weights(cfg, tied=True))
+    untied = LlamaModel(cfg, random_weights(cfg, tied=False))
+    # The untied model has an extra (vocab x hidden) float32 matrix; the tied one shares it.
+    assert untied.weight_bytes() - tied.weight_bytes() == tied.embed.nbytes
