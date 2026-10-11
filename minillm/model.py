@@ -132,7 +132,11 @@ class LlamaModel:
         return cls(cfg, LazyWeights(model_dir), quant=quant, group_size=group_size)
 
     def weight_bytes(self) -> int:
-        total = self.embed.nbytes + self.final_norm.nbytes + self.lm_head.nbytes
+        total = self.embed.nbytes + self.final_norm.nbytes
+        shared = isinstance(getattr(self.lm_head, "w", None), np.ndarray) and np.shares_memory(
+            self.lm_head.w, self.embed)  # tied fp32 head reuses the embedding table: count it once
+        if not shared:
+            total += self.lm_head.nbytes
         for L in self.layers:
             total += L.attn_norm.nbytes + L.mlp_norm.nbytes
             for lin in (L.wq, L.wk, L.wv, L.wo, L.gate, L.up, L.down):
