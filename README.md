@@ -1,6 +1,6 @@
 # minillm
 
-[![CI](https://github.com/YOUR_USERNAME/minillm/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/minillm/actions)
+[![CI](https://github.com/srnomula06/minillm/actions/workflows/ci.yml/badge.svg)](https://github.com/srnomula06/minillm/actions)
 
 A from-scratch **LLM inference engine in pure NumPy**. It loads Llama-architecture checkpoints
 (safetensors) and implements the pieces that make inference fast and memory-efficient: a KV cache,
@@ -102,6 +102,7 @@ input channels with two values packed per byte. Embeddings and norms stay float3
 - int8 / int4 error bounds, lossless int4 packing, memory reduction
 - safetensors F32 / F16 / BF16 loading, HF-style model directory round-trip, benchmark smoke test
 - float32 is preserved end to end (guards against silent float64 upcasting)
+- **Golden Reference Validation (`verify_engine.py`)**: A cross-framework verification script that compares your NumPy greedy output token-for-token against the official PyTorch Hugging Face `transformers` implementation using `SmolLM2-360M` to guarantee mathematical correctness.
 
 ## Benchmarks
 
